@@ -1,3 +1,13 @@
-.idea/
-cmake-build-debug/
+# Папки сборки и бинарники
 bin/
+build/
+cmake-build-debug/
+
+# Настройки IDE JetBrains (CLion)
+.idea/
+
+# Большие файлы и архивы
+*.appimage
+
+# Другие временные файлы
+*.user
