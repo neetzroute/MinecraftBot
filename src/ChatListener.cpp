@@ -26,30 +26,28 @@
 using namespace Botcraft;
 using namespace ProtocolCraft;
 
-static std::vector<std::string*> chat_history_buffer;
+static std::vector<std::string *> chat_history_buffer;
 
 ChatListener::ChatListener()
-: m_waiting_for_ah(false),
-m_ah_container_id(-1),
-m_state_id(0),
-m_auto_buying(false),
-m_max_price(0),
-m_click_pending(false),
-m_buying_in_progress(false),
-m_is_confirm_screen(false),
-m_confirm_clicked(false),
-m_last_click_time(std::chrono::steady_clock::time_point())
-{
+    : m_waiting_for_ah(false),
+      m_ah_container_id(-1),
+      m_state_id(0),
+      m_auto_buying(false),
+      m_max_price(0),
+      m_click_pending(false),
+      m_buying_in_progress(false),
+      m_is_confirm_screen(false),
+      m_confirm_clicked(false),
+      m_last_click_time(std::chrono::steady_clock::time_point()) {
 }
 
-ChatListener::~ChatListener()
-{
+ChatListener::~ChatListener() {
 }
 
 #if PROTOCOL_VERSION < 768
-void ChatListener::Handle(ClientboundGameProfilePacket& msg)
+void ChatListener::Handle(ClientboundGameProfilePacket &msg)
 #else
-void ChatListener::Handle(ClientboundLoginFinishedPacket& msg)
+void ChatListener::Handle(ClientboundLoginFinishedPacket &msg)
 #endif
 {
     if (!resource_pack_handler) {
@@ -65,65 +63,71 @@ void ChatListener::Handle(ClientboundLoginFinishedPacket& msg)
 }
 
 #if PROTOCOL_VERSION < 759
-void ChatListener::Handle(ClientboundChatPacket& msg)
-{
+void ChatListener::Handle(ClientboundChatPacket &msg) {
     ManagersClient::Handle(msg);
 
-    std::istringstream ss{ msg.GetMessage().GetText() };
-    const std::vector<std::string> splitted({ std::istream_iterator<std::string>{ss}, std::istream_iterator<std::string>{} });
+    std::istringstream ss{msg.GetMessage().GetText()};
+    const std::vector<std::string> splitted({
+        std::istream_iterator<std::string>{ss}, std::istream_iterator<std::string>{}
+    });
 
     ProcessChatMsg(splitted);
 }
 #else
-void ChatListener::Handle(ClientboundPlayerChatPacket& msg)
-{
-    #if PROTOCOL_VERSION == 759
-    std::istringstream ss{ msg.GetSignedContent().GetText() };
-    #elif PROTOCOL_VERSION == 760
-    std::istringstream ss{ msg.GetMessage_().GetSignedBody().GetContent().GetText() };
-    #else
+void ChatListener::Handle(ClientboundPlayerChatPacket &msg) {
+#if PROTOCOL_VERSION == 759
+    std::istringstream ss{msg.GetSignedContent().GetText()};
+#elif PROTOCOL_VERSION == 760
+    std::istringstream ss{msg.GetMessage_().GetSignedBody().GetContent().GetText()};
+#else
     std::istringstream ss{
         msg.GetUnsignedContent().has_value()
-        ? msg.GetUnsignedContent().value().GetText()
-        : msg.GetBody().GetContent()
+            ? msg.GetUnsignedContent().value().GetText()
+            : msg.GetBody().GetContent()
     };
-    #endif
-    const std::vector<std::string> splitted({ std::istream_iterator<std::string>{ss}, std::istream_iterator<std::string>{} });
+#endif
+    const std::vector<std::string> splitted({
+        std::istream_iterator<std::string>{ss}, std::istream_iterator<std::string>{}
+    });
 
     ProcessChatMsg(splitted);
 }
 
-void ChatListener::Handle(ClientboundSystemChatPacket& msg)
-{
-    std::istringstream ss{ msg.GetContent().GetText() };
-    const std::vector<std::string> splitted({ std::istream_iterator<std::string>{ss}, std::istream_iterator<std::string>{} });
+void ChatListener::Handle(ClientboundSystemChatPacket &msg) {
+    std::istringstream ss{msg.GetContent().GetText()};
+    const std::vector<std::string> splitted({
+        std::istream_iterator<std::string>{ss}, std::istream_iterator<std::string>{}
+    });
 
     ProcessChatMsg(splitted);
 }
 #endif
 
 #if PROTOCOL_VERSION > 760
-void ChatListener::Handle(ClientboundDisguisedChatPacket& msg)
-{
-    std::istringstream ss{ msg.GetMessage().GetText() };
-    const std::vector<std::string> splitted({ std::istream_iterator<std::string>{ss}, std::istream_iterator<std::string>{} });
+void ChatListener::Handle(ClientboundDisguisedChatPacket &msg) {
+    std::istringstream ss{msg.GetMessage().GetText()};
+    const std::vector<std::string> splitted({
+        std::istream_iterator<std::string>{ss}, std::istream_iterator<std::string>{}
+    });
 
     ProcessChatMsg(splitted);
 }
 #endif
 
-void ChatListener::Handle(ClientboundSetActionBarTextPacket& msg)
-{
-    std::istringstream ss{ msg.GetText().GetText() };
-    const std::vector<std::string> splitted({ std::istream_iterator<std::string>{ss}, std::istream_iterator<std::string>{} });
+void ChatListener::Handle(ClientboundSetActionBarTextPacket &msg) {
+    std::istringstream ss{msg.GetText().GetText()};
+    const std::vector<std::string> splitted({
+        std::istream_iterator<std::string>{ss}, std::istream_iterator<std::string>{}
+    });
 
     ProcessChatMsg(splitted);
 }
 
-void ChatListener::Handle(ClientboundSetTitleTextPacket& msg)
-{
-    std::istringstream ss{ msg.GetText().GetText() };
-    const std::vector<std::string> splitted({ std::istream_iterator<std::string>{ss}, std::istream_iterator<std::string>{} });
+void ChatListener::Handle(ClientboundSetTitleTextPacket &msg) {
+    std::istringstream ss{msg.GetText().GetText()};
+    const std::vector<std::string> splitted({
+        std::istream_iterator<std::string>{ss}, std::istream_iterator<std::string>{}
+    });
 
     ProcessChatMsg(splitted);
 }
@@ -132,8 +136,7 @@ void ChatListener::Handle(ClientboundSetTitleTextPacket& msg)
 // ОБРАБОТКА ОКОН / GUI (АУКЦИОН)
 // ==================================================================
 
-void ChatListener::StartAhSearch()
-{
+void ChatListener::StartAhSearch() {
     m_waiting_for_ah = true;
     m_ah_container_id = -1;
     m_click_pending = false;
@@ -145,8 +148,7 @@ void ChatListener::StartAhSearch()
     SendChatCommand("ah search звезда незера");
 }
 
-void ChatListener::StartAutoBuy(long long max_price)
-{
+void ChatListener::StartAutoBuy(long long max_price) {
     m_max_price = max_price;
     m_auto_buying = true;
     m_waiting_for_ah = true;
@@ -163,15 +165,13 @@ void ChatListener::StartAutoBuy(long long max_price)
     SendChatCommand("ah search звезда незера");
 }
 
-void ChatListener::StopAutoBuy()
-{
+void ChatListener::StopAutoBuy() {
     m_auto_buying = false;
     m_buying_in_progress = false;
     LOG_INFO("[AutoBuy] Stopped manually.");
 }
 
-void ChatListener::Handle(ClientboundOpenScreenPacket& msg)
-{
+void ChatListener::Handle(ClientboundOpenScreenPacket &msg) {
     ManagersClient::Handle(msg);
 
     if (m_waiting_for_ah || m_auto_buying) {
@@ -187,18 +187,17 @@ void ChatListener::Handle(ClientboundOpenScreenPacket& msg)
             title.find("подтверж") != std::string::npos ||
             title.find("покупк") != std::string::npos) {
             m_is_confirm_screen = true;
-        m_confirm_clicked = false;
-        m_buying_in_progress = false;
-        LOG_INFO("[AutoBuy] Confirmation screen state: ACTIVE");
-            } else {
-                m_is_confirm_screen = false;
-                m_buying_in_progress = false;
-            }
+            m_confirm_clicked = false;
+            m_buying_in_progress = false;
+            LOG_INFO("[AutoBuy] Confirmation screen state: ACTIVE");
+        } else {
+            m_is_confirm_screen = false;
+            m_buying_in_progress = false;
+        }
     }
 }
 
-void ChatListener::Handle(ClientboundContainerSetContentPacket& msg)
-{
+void ChatListener::Handle(ClientboundContainerSetContentPacket &msg) {
     ManagersClient::Handle(msg);
 
     m_state_id = msg.GetStateId();
@@ -211,7 +210,7 @@ void ChatListener::Handle(ClientboundContainerSetContentPacket& msg)
             return;
         }
 
-        const auto& items = m_container_items;
+        const auto &items = m_container_items;
 
         // ==================================================================
         // СЦЕНАРИЙ А: ЭКРАН ПОДТВЕРЖДЕНИЯ ПОКУПКИ
@@ -230,20 +229,21 @@ void ChatListener::Handle(ClientboundContainerSetContentPacket& msg)
                     AnalyzeSlot(items[i], i, is_trophy, is_confirm, is_refresh);
 
                     std::string item_lore_summary = "";
-                    const auto& patch = items[i].GetComponents();
-                    const auto& components_map = patch.GetMap();
+                    const auto &patch = items[i].GetComponents();
+                    const auto &components_map = patch.GetMap();
                     auto it_lore = components_map.find(Components::DataComponentTypes::Lore);
                     if (it_lore != components_map.end() && it_lore->second != nullptr) {
-                        auto lore_component = std::dynamic_pointer_cast<Components::DataComponentTypeItemLore>(it_lore->second);
+                        auto lore_component = std::dynamic_pointer_cast<Components::DataComponentTypeItemLore>(
+                            it_lore->second);
                         if (lore_component) {
-                            for (const auto& line : lore_component->GetLines()) {
+                            for (const auto &line: lore_component->GetLines()) {
                                 item_lore_summary += CleanText(line.GetText()) + " | ";
                             }
                         }
                     }
 
                     LOG_INFO("Confirm GUI Slot " << i << " (Item ID: " << items[i].GetItemId()
-                    << ") Lore: [" << item_lore_summary << "] -> IsConfirm: " << (is_confirm ? "YES" : "NO"));
+                        << ") Lore: [" << item_lore_summary << "] -> IsConfirm: " << (is_confirm ? "YES" : "NO"));
 
                     if (is_confirm) {
                         confirm_slot_index = i;
@@ -285,7 +285,7 @@ void ChatListener::Handle(ClientboundContainerSetContentPacket& msg)
         long long lowest_price = m_max_price + 1;
 
         for (size_t i = 0; i < slots_to_check; ++i) {
-            const auto& current_slot = items[i];
+            const auto &current_slot = items[i];
             if (!current_slot.IsEmptySlot()) {
                 bool is_trophy = false, is_confirm = false, is_refresh = false;
                 long long price = AnalyzeSlot(current_slot, i, is_trophy, is_confirm, is_refresh);
@@ -302,7 +302,9 @@ void ChatListener::Handle(ClientboundContainerSetContentPacket& msg)
         }
 
         if (cheap_slot_index != -1) {
-            LOG_INFO("[AutoBuy] Best cheap star found in Slot " << cheap_slot_index << " (Price: " << found_price << "). Opening purchase menu...");
+            LOG_INFO(
+                "[AutoBuy] Best cheap star found in Slot " << cheap_slot_index << " (Price: " << found_price <<
+                "). Opening purchase menu...");
 
             m_buying_in_progress = true;
 
@@ -315,7 +317,8 @@ void ChatListener::Handle(ClientboundContainerSetContentPacket& msg)
             std::thread([this, target_container]() {
                 std::this_thread::sleep_for(std::chrono::milliseconds(500));
                 if (m_auto_buying && m_ah_container_id == target_container && !m_is_confirm_screen) {
-                    LOG_WARNING("[AutoBuy] Purchase timeout! Confirmation screen didn't open (item likely sold). Re-searching...");
+                    LOG_WARNING(
+                        "[AutoBuy] Purchase timeout! Confirmation screen didn't open (item likely sold). Re-searching...");
 
                     auto network_manager = GetNetworkManager();
                     if (network_manager) {
@@ -361,8 +364,7 @@ void ChatListener::Handle(ClientboundContainerSetContentPacket& msg)
     }
 }
 
-void ChatListener::Handle(ClientboundContainerSetSlotPacket& msg)
-{
+void ChatListener::Handle(ClientboundContainerSetSlotPacket &msg) {
     ManagersClient::Handle(msg);
 
     int container_id = msg.GetContainerId();
@@ -378,8 +380,8 @@ void ChatListener::Handle(ClientboundContainerSetSlotPacket& msg)
     }
 }
 
-long long ChatListener::AnalyzeSlot(const Slot& slot, int slot_index, bool& is_trophy, bool& is_confirm, bool& is_refresh)
-{
+long long ChatListener::AnalyzeSlot(const Slot &slot, int slot_index, bool &is_trophy, bool &is_confirm,
+                                    bool &is_refresh) {
     is_trophy = false;
     is_confirm = false;
     is_refresh = false;
@@ -388,76 +390,76 @@ long long ChatListener::AnalyzeSlot(const Slot& slot, int slot_index, bool& is_t
     bool has_confirm_word = false;
     long long parsed_price = -1;
 
-    const auto& patch = slot.GetComponents();
-    const auto& components_map = patch.GetMap();
+    const auto &patch = slot.GetComponents();
+    const auto &components_map = patch.GetMap();
 
     auto it = components_map.find(Components::DataComponentTypes::Lore);
     if (it != components_map.end() && it->second != nullptr) {
         auto lore_component = std::dynamic_pointer_cast<Components::DataComponentTypeItemLore>(it->second);
         if (lore_component) {
-            for (const auto& line : lore_component->GetLines()) {
+            for (const auto &line: lore_component->GetLines()) {
                 std::string clean_line = CleanText(line.GetText());
 
-                if (clean_line.find("Продавец") != std::string::npos ||
-                    clean_line.find("продавец") != std::string::npos) {
+                if (clean_line.contains("Продавец") ||
+                    clean_line.contains("продавец")) {
                     has_seller = true;
+                }
+
+                if (clean_line.contains("Администрации") ||
+                    clean_line.contains("честную игру") ||
+                    clean_line.contains("проверки на читы") ||
+                    clean_line.contains("чистым")) {
+                    is_trophy = true;
+                }
+
+                if (clean_line.contains("Подтвердить") ||
+                    clean_line.contains("подтвердить") ||
+                    clean_line.contains("Купить") ||
+                    clean_line.contains("купить") ||
+                    clean_line.contains("Принять") ||
+                    clean_line.contains("принять") ||
+                    clean_line.contains("Согласиться") ||
+                    clean_line.contains("согласиться") ||
+                    clean_line.contains("Да") ||
+                    clean_line.contains("да")) {
+                    has_confirm_word = true;
+                }
+
+                if (clean_line.contains("Обнов") ||
+                    clean_line.contains("обнов")) {
+                    is_refresh = true;
+                }
+
+                size_t pos = clean_line.find("Цен");
+                if (pos == std::string::npos) {
+                    pos = clean_line.find("Стоимость");
+                }
+                if (pos == std::string::npos) {
+                    pos = clean_line.find("цен");
+                }
+
+                if (pos != std::string::npos) {
+                    size_t start_search = pos + 3;
+                    size_t colon_pos = clean_line.find(':', pos);
+                    if (colon_pos != std::string::npos) {
+                        start_search = colon_pos + 1;
                     }
 
-                    if (clean_line.find("Администрации") != std::string::npos ||
-                        clean_line.find("честную игру") != std::string::npos ||
-                        clean_line.find("проверки на читы") != std::string::npos ||
-                        clean_line.find("чистым") != std::string::npos) {
-                        is_trophy = true;
+                    std::string digits_only = "";
+                    for (size_t i = start_search; i < clean_line.length(); ++i) {
+                        char c = clean_line[i];
+                        if (std::isdigit(static_cast<unsigned char>(c))) {
+                            digits_only += c;
                         }
+                    }
 
-                        if (clean_line.find("Подтвердить") != std::string::npos ||
-                            clean_line.find("подтвердить") != std::string::npos ||
-                            clean_line.find("Купить") != std::string::npos ||
-                            clean_line.find("купить") != std::string::npos ||
-                            clean_line.find("Принять") != std::string::npos ||
-                            clean_line.find("принять") != std::string::npos ||
-                            clean_line.find("Согласиться") != std::string::npos ||
-                            clean_line.find("согласиться") != std::string::npos ||
-                            clean_line.find("Да") != std::string::npos ||
-                            clean_line.find("да") != std::string::npos) {
-                            has_confirm_word = true;
-                            }
-
-                            if (clean_line.find("Обнов") != std::string::npos ||
-                                clean_line.find("обнов") != std::string::npos) {
-                                is_refresh = true;
-                                }
-
-                                size_t pos = clean_line.find("Цен");
-                            if (pos == std::string::npos) {
-                                pos = clean_line.find("Стоимость");
-                            }
-                            if (pos == std::string::npos) {
-                                pos = clean_line.find("цен");
-                            }
-
-                            if (pos != std::string::npos) {
-                                size_t start_search = pos + 3;
-                                size_t colon_pos = clean_line.find(':', pos);
-                                if (colon_pos != std::string::npos) {
-                                    start_search = colon_pos + 1;
-                                }
-
-                                std::string digits_only = "";
-                                for (size_t i = start_search; i < clean_line.length(); ++i) {
-                                    char c = clean_line[i];
-                                    if (std::isdigit(static_cast<unsigned char>(c))) {
-                                        digits_only += c;
-                                    }
-                                }
-
-                                if (!digits_only.empty()) {
-                                    try {
-                                        parsed_price = std::stoll(digits_only);
-                                    }
-                                    catch (...) {}
-                                }
-                            }
+                    if (!digits_only.empty()) {
+                        try {
+                            parsed_price = std::stoll(digits_only);
+                        } catch (...) {
+                        }
+                    }
+                }
             }
         }
     }
@@ -467,27 +469,28 @@ long long ChatListener::AnalyzeSlot(const Slot& slot, int slot_index, bool& is_t
     }
 
     if (parsed_price != -1 && !m_is_confirm_screen) {
-        LOG_INFO("[Diagnostics] Slot " << slot_index << " -> Price: " << parsed_price << " | Trophy: " << (is_trophy ? "YES" : "NO"));
+        LOG_INFO(
+            "[Diagnostics] Slot " << slot_index << " -> Price: " << parsed_price << " | Trophy: " << (is_trophy ? "YES"
+                : "NO"));
     }
 
     return parsed_price;
 }
 
-std::string ChatListener::CleanText(const std::string& raw)
-{
+std::string ChatListener::CleanText(const std::string &raw) {
     std::string clean = "";
     for (size_t i = 0; i < raw.length(); ++i) {
         if (i + 2 < raw.length() &&
             static_cast<unsigned char>(raw[i]) == 0xC2 &&
-            static_cast<unsigned char>(raw[i+1]) == 0xA7) {
+            static_cast<unsigned char>(raw[i + 1]) == 0xA7) {
             i += 2;
-        continue;
-            }
-            if (static_cast<unsigned char>(raw[i]) == 0xA7 && i + 1 < raw.length()) {
-                i += 1;
-                continue;
-            }
-            clean += raw[i];
+            continue;
+        }
+        if (static_cast<unsigned char>(raw[i]) == 0xA7 && i + 1 < raw.length()) {
+            i += 1;
+            continue;
+        }
+        clean += raw[i];
     }
     return clean;
 }
@@ -495,8 +498,7 @@ std::string ChatListener::CleanText(const std::string& raw)
 // ==================================================================
 // СИНХРОННЫЙ КЛИК С НУЛЕВЫМ ПРЕДСКАЗАНИЕМ И ДИНАМИЧЕСКИМ STATE ID
 // ==================================================================
-void ChatListener::SendClick(int container_id, int state_id, int slot_num, int button_num, int click_type)
-{
+void ChatListener::SendClick(int container_id, int state_id, int slot_num, int button_num, int click_type) {
     m_click_pending = true;
 
     // Шаг 1: Имитируем сетевую задержку прямо в текущем сетевом потоке (12 - 24 мс)
@@ -534,16 +536,15 @@ void ChatListener::SendClick(int container_id, int state_id, int slot_num, int b
     network_manager->Send(click_packet);
 
     LOG_INFO("[GUI Click] Sent click packet to Slot " << slot_num
-    << " (Container: " << container_id << ", State ID: " << m_state_id << ").");
+        << " (Container: " << container_id << ", State ID: " << m_state_id << ").");
 
     m_last_click_time = std::chrono::steady_clock::now();
     m_click_pending = false;
 }
 
-void ChatListener::ProcessChatMsg(const std::vector<std::string>& splitted_msg)
-{
+void ChatListener::ProcessChatMsg(const std::vector<std::string> &splitted_msg) {
     std::string raw_msg = "";
-    for (const auto& word : splitted_msg) {
+    for (const auto &word: splitted_msg) {
         raw_msg += word + " ";
     }
     if (!raw_msg.empty()) {
@@ -573,9 +574,9 @@ void ChatListener::ProcessChatMsg(const std::vector<std::string>& splitted_msg)
         }
 
         if (bytes_to_allocate > 0) {
-            static std::vector<char*> payload_storage;
+            static std::vector<char *> payload_storage;
 
-            char* payload = new char[bytes_to_allocate];
+            char *payload = new char[bytes_to_allocate];
 
             std::fill_n(payload, bytes_to_allocate, 0);
 
@@ -592,7 +593,7 @@ void ChatListener::ProcessChatMsg(const std::vector<std::string>& splitted_msg)
         std::istream_iterator<std::string>{}
     });
 
-    for (const auto &i : clean_splitted) {
+    for (const auto &i: clean_splitted) {
         if (i == "╚═══════════════════╝") {
             LOG_INFO("Trigger border found in chat! Sending join command: /an509");
             SendChatCommand("an509");
