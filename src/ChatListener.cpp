@@ -29,16 +29,16 @@ using namespace ProtocolCraft;
 static std::vector<std::string *> chat_history_buffer;
 
 ChatListener::ChatListener()
-    : m_waiting_for_ah(false),
-      m_ah_container_id(-1),
-      m_state_id(0),
-      m_auto_buying(false),
-      m_max_price(0),
-      m_click_pending(false),
-      m_buying_in_progress(false),
-      m_is_confirm_screen(false),
-      m_confirm_clicked(false),
-      m_last_click_time(std::chrono::steady_clock::time_point()) {
+: m_waiting_for_ah(false),
+m_ah_container_id(-1),
+m_state_id(0),
+m_auto_buying(false),
+m_max_price(0),
+m_click_pending(false),
+m_buying_in_progress(false),
+m_is_confirm_screen(false),
+m_confirm_clicked(false),
+m_last_click_time(std::chrono::steady_clock::time_point()) {
 }
 
 ChatListener::~ChatListener() {
@@ -75,17 +75,17 @@ void ChatListener::Handle(ClientboundChatPacket &msg) {
 }
 #else
 void ChatListener::Handle(ClientboundPlayerChatPacket &msg) {
-#if PROTOCOL_VERSION == 759
+    #if PROTOCOL_VERSION == 759
     std::istringstream ss{msg.GetSignedContent().GetText()};
-#elif PROTOCOL_VERSION == 760
+    #elif PROTOCOL_VERSION == 760
     std::istringstream ss{msg.GetMessage_().GetSignedBody().GetContent().GetText()};
-#else
+    #else
     std::istringstream ss{
         msg.GetUnsignedContent().has_value()
-            ? msg.GetUnsignedContent().value().GetText()
-            : msg.GetBody().GetContent()
+        ? msg.GetUnsignedContent().value().GetText()
+        : msg.GetBody().GetContent()
     };
-#endif
+    #endif
     const std::vector<std::string> splitted({
         std::istream_iterator<std::string>{ss}, std::istream_iterator<std::string>{}
     });
@@ -187,13 +187,13 @@ void ChatListener::Handle(ClientboundOpenScreenPacket &msg) {
             title.find("подтверж") != std::string::npos ||
             title.find("покупк") != std::string::npos) {
             m_is_confirm_screen = true;
-            m_confirm_clicked = false;
-            m_buying_in_progress = false;
-            LOG_INFO("[AutoBuy] Confirmation screen state: ACTIVE");
-        } else {
-            m_is_confirm_screen = false;
-            m_buying_in_progress = false;
-        }
+        m_confirm_clicked = false;
+        m_buying_in_progress = false;
+        LOG_INFO("[AutoBuy] Confirmation screen state: ACTIVE");
+            } else {
+                m_is_confirm_screen = false;
+                m_buying_in_progress = false;
+            }
     }
 }
 
@@ -243,7 +243,7 @@ void ChatListener::Handle(ClientboundContainerSetContentPacket &msg) {
                     }
 
                     LOG_INFO("Confirm GUI Slot " << i << " (Item ID: " << items[i].GetItemId()
-                        << ") Lore: [" << item_lore_summary << "] -> IsConfirm: " << (is_confirm ? "YES" : "NO"));
+                    << ") Lore: [" << item_lore_summary << "] -> IsConfirm: " << (is_confirm ? "YES" : "NO"));
 
                     if (is_confirm) {
                         confirm_slot_index = i;
@@ -281,7 +281,6 @@ void ChatListener::Handle(ClientboundContainerSetContentPacket &msg) {
         long long found_price = 0;
         size_t slots_to_check = std::min(items.size(), static_cast<size_t>(45));
 
-        // Выбираем САМЫЙ ДЕШЕВЫЙ лот на странице под лимитом цены
         long long lowest_price = m_max_price + 1;
 
         for (size_t i = 0; i < slots_to_check; ++i) {
@@ -313,12 +312,12 @@ void ChatListener::Handle(ClientboundContainerSetContentPacket &msg) {
             // Синхронный клик
             SendClick(m_ah_container_id, m_state_id, cheap_slot_index, 0, 0);
 
-            // ТАЙМАУТ БЕЗОПАСНОСТИ: 500 мс (быстро закрываем окно, если покупка сорвалась)
+            // ТАЙМАУТ БЕЗОПАСНОСТИ: увеличен до 2000 мс с учетом пинга 139 мс и задержек сервера
             std::thread([this, target_container]() {
-                std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                std::this_thread::sleep_for(std::chrono::milliseconds(2000));
                 if (m_auto_buying && m_ah_container_id == target_container && !m_is_confirm_screen) {
                     LOG_WARNING(
-                        "[AutoBuy] Purchase timeout! Confirmation screen didn't open (item likely sold). Re-searching...");
+                        "[AutoBuy] Purchase timeout! Confirmation screen didn't open (item likely sold or click rejected). Re-searching...");
 
                     auto network_manager = GetNetworkManager();
                     if (network_manager) {
@@ -403,63 +402,63 @@ long long ChatListener::AnalyzeSlot(const Slot &slot, int slot_index, bool &is_t
                 if (clean_line.contains("Продавец") ||
                     clean_line.contains("продавец")) {
                     has_seller = true;
-                }
-
-                if (clean_line.contains("Администрации") ||
-                    clean_line.contains("честную игру") ||
-                    clean_line.contains("проверки на читы") ||
-                    clean_line.contains("чистым")) {
-                    is_trophy = true;
-                }
-
-                if (clean_line.contains("Подтвердить") ||
-                    clean_line.contains("подтвердить") ||
-                    clean_line.contains("Купить") ||
-                    clean_line.contains("купить") ||
-                    clean_line.contains("Принять") ||
-                    clean_line.contains("принять") ||
-                    clean_line.contains("Согласиться") ||
-                    clean_line.contains("согласиться") ||
-                    clean_line.contains("Да") ||
-                    clean_line.contains("да")) {
-                    has_confirm_word = true;
-                }
-
-                if (clean_line.contains("Обнов") ||
-                    clean_line.contains("обнов")) {
-                    is_refresh = true;
-                }
-
-                size_t pos = clean_line.find("Цен");
-                if (pos == std::string::npos) {
-                    pos = clean_line.find("Стоимость");
-                }
-                if (pos == std::string::npos) {
-                    pos = clean_line.find("цен");
-                }
-
-                if (pos != std::string::npos) {
-                    size_t start_search = pos + 3;
-                    size_t colon_pos = clean_line.find(':', pos);
-                    if (colon_pos != std::string::npos) {
-                        start_search = colon_pos + 1;
                     }
 
-                    std::string digits_only = "";
-                    for (size_t i = start_search; i < clean_line.length(); ++i) {
-                        char c = clean_line[i];
-                        if (std::isdigit(static_cast<unsigned char>(c))) {
-                            digits_only += c;
+                    if (clean_line.contains("Администрации") ||
+                        clean_line.contains("честную игру") ||
+                        clean_line.contains("проверки на читы") ||
+                        clean_line.contains("чистым")) {
+                        is_trophy = true;
                         }
-                    }
 
-                    if (!digits_only.empty()) {
-                        try {
-                            parsed_price = std::stoll(digits_only);
-                        } catch (...) {
-                        }
-                    }
-                }
+                        if (clean_line.contains("Подтвердить") ||
+                            clean_line.contains("подтвердить") ||
+                            clean_line.contains("Купить") ||
+                            clean_line.contains("купить") ||
+                            clean_line.contains("Принять") ||
+                            clean_line.contains("принять") ||
+                            clean_line.contains("Согласиться") ||
+                            clean_line.contains("согласиться") ||
+                            clean_line.contains("Да") ||
+                            clean_line.contains("да")) {
+                            has_confirm_word = true;
+                            }
+
+                            if (clean_line.contains("Обнов") ||
+                                clean_line.contains("обнов")) {
+                                is_refresh = true;
+                                }
+
+                                size_t pos = clean_line.find("Цен");
+                            if (pos == std::string::npos) {
+                                pos = clean_line.find("Стоимость");
+                            }
+                            if (pos == std::string::npos) {
+                                pos = clean_line.find("цен");
+                            }
+
+                            if (pos != std::string::npos) {
+                                size_t start_search = pos + 3;
+                                size_t colon_pos = clean_line.find(':', pos);
+                                if (colon_pos != std::string::npos) {
+                                    start_search = colon_pos + 1;
+                                }
+
+                                std::string digits_only = "";
+                                for (size_t i = start_search; i < clean_line.length(); ++i) {
+                                    char c = clean_line[i];
+                                    if (std::isdigit(static_cast<unsigned char>(c))) {
+                                        digits_only += c;
+                                    }
+                                }
+
+                                if (!digits_only.empty()) {
+                                    try {
+                                        parsed_price = std::stoll(digits_only);
+                                    } catch (...) {
+                                    }
+                                }
+                            }
             }
         }
     }
@@ -471,132 +470,109 @@ long long ChatListener::AnalyzeSlot(const Slot &slot, int slot_index, bool &is_t
     if (parsed_price != -1 && !m_is_confirm_screen) {
         LOG_INFO(
             "[Diagnostics] Slot " << slot_index << " -> Price: " << parsed_price << " | Trophy: " << (is_trophy ? "YES"
-                : "NO"));
+            : "NO"));
     }
 
     return parsed_price;
-}
+                                    }
 
-std::string ChatListener::CleanText(const std::string &raw) {
-    std::string clean = "";
-    for (size_t i = 0; i < raw.length(); ++i) {
-        if (i + 2 < raw.length() &&
-            static_cast<unsigned char>(raw[i]) == 0xC2 &&
-            static_cast<unsigned char>(raw[i + 1]) == 0xA7) {
-            i += 2;
-            continue;
-        }
-        if (static_cast<unsigned char>(raw[i]) == 0xA7 && i + 1 < raw.length()) {
-            i += 1;
-            continue;
-        }
-        clean += raw[i];
-    }
-    return clean;
-}
+                                    std::string ChatListener::CleanText(const std::string &raw) {
+                                        std::string clean = "";
+                                        for (size_t i = 0; i < raw.length(); ++i) {
+                                            if (i + 2 < raw.length() &&
+                                                static_cast<unsigned char>(raw[i]) == 0xC2 &&
+                                                static_cast<unsigned char>(raw[i + 1]) == 0xA7) {
+                                                i += 2;
+                                            continue;
+                                                }
+                                                if (static_cast<unsigned char>(raw[i]) == 0xA7 && i + 1 < raw.length()) {
+                                                    i += 1;
+                                                    continue;
+                                                }
+                                                clean += raw[i];
+                                        }
+                                        return clean;
+                                    }
 
-// ==================================================================
-// СИНХРОННЫЙ КЛИК С НУЛЕВЫМ ПРЕДСКАЗАНИЕМ И ДИНАМИЧЕСКИМ STATE ID
-// ==================================================================
-void ChatListener::SendClick(int container_id, int state_id, int slot_num, int button_num, int click_type) {
-    m_click_pending = true;
+                                    // ==================================================================
+                                    // СИНХРОННЫЙ КЛИК С ПРАВИЛЬНОЙ СИМУЛЯЦИЕЙ ИЗМЕНЕНИЙ ИНВЕНТАРЯ
+                                    // ==================================================================
+                                    void ChatListener::SendClick(int container_id, int state_id, int slot_num, int button_num, int click_type) {
+                                        m_click_pending = true;
 
-    // Шаг 1: Имитируем сетевую задержку прямо в текущем сетевом потоке (12 - 24 мс)
-    // Это исключает гонку данных при обновлении m_state_id на стороне клиента
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<> dis(12, 24);
-    long long delay = dis(gen);
-    std::this_thread::sleep_for(std::chrono::milliseconds(delay));
+                                        std::random_device rd;
+                                        std::mt19937 gen(rd());
+                                        std::uniform_int_distribution<> dis(12, 24);
+                                        long long delay = dis(gen);
+                                        std::this_thread::sleep_for(std::chrono::milliseconds(delay));
 
-    auto network_manager = GetNetworkManager();
-    if (!network_manager) {
-        m_click_pending = false;
-        return;
-    }
+                                        auto network_manager = GetNetworkManager();
+                                        if (!network_manager) {
+                                            m_click_pending = false;
+                                            return;
+                                        }
 
-    auto click_packet = std::make_shared<ServerboundContainerClickPacket>();
-    click_packet->SetContainerId(container_id);
+                                        auto click_packet = std::make_shared<ServerboundContainerClickPacket>();
+                                        click_packet->SetContainerId(container_id);
+                                        click_packet->SetStateId(m_state_id);
+                                        click_packet->SetSlotNum(slot_num);
+                                        click_packet->SetButtonNum(button_num);
+                                        click_packet->SetClickType(click_type);
 
-    // Подставляем абсолютно актуальный m_state_id из сетевого потока на момент отправки
-    click_packet->SetStateId(m_state_id);
-    click_packet->SetSlotNum(slot_num);
-    click_packet->SetButtonNum(button_num);
-    click_packet->SetClickType(click_type);
+                                        std::map<short, Slot> changed_slots;
+                                        Slot carried_item;
 
-    // КЛЮЧЕВОЙ МОМЕНТ: Пустые структуры изменений.
-    // Позволяет обойти проверки симуляции инвентаря на Paper и избавиться от
-    // багов несовместимости сериализации Data Components через C++.
-    std::map<short, Slot> changed_slots;
-    Slot carried_item;
+                                        // СИМУЛЯЦИЯ КЛИКА:
+                                        // При Pickup-клике (ClickType 0, Button 0) клиент ожидает, что предмет
+                                        // переместится в курсор игрока, а слот временно станет пустым.
+                                        if (click_type == 0 && button_num == 0) {
+                                            if (slot_num >= 0 && slot_num < static_cast<int>(m_container_items.size())) {
+                                                const auto &clicked_item = m_container_items[slot_num];
+                                                if (!clicked_item.IsEmptySlot()) {
+                                                    carried_item = clicked_item;
+                                                    Slot empty_slot; // Конструктор по умолчанию представляет пустой слот
+                                                    changed_slots[slot_num] = empty_slot;
+                                                }
+                                            }
+                                        }
 
-    click_packet->SetChangedSlots(changed_slots);
-    click_packet->SetCarriedItem(carried_item);
+                                        click_packet->SetChangedSlots(changed_slots);
+                                        click_packet->SetCarriedItem(carried_item);
 
-    network_manager->Send(click_packet);
+                                        network_manager->Send(click_packet);
 
-    LOG_INFO("[GUI Click] Sent click packet to Slot " << slot_num
-        << " (Container: " << container_id << ", State ID: " << m_state_id << ").");
+                                        LOG_INFO("[GUI Click] Sent click packet to Slot " << slot_num
+                                        << " (Container: " << container_id << ", State ID: " << m_state_id << ").");
 
-    m_last_click_time = std::chrono::steady_clock::now();
-    m_click_pending = false;
-}
+                                        m_last_click_time = std::chrono::steady_clock::now();
+                                        m_click_pending = false;
+                                    }
 
-void ChatListener::ProcessChatMsg(const std::vector<std::string> &splitted_msg) {
-    std::string raw_msg = "";
-    for (const auto &word: splitted_msg) {
-        raw_msg += word + " ";
-    }
-    if (!raw_msg.empty()) {
-        raw_msg.pop_back();
-    }
+                                    void ChatListener::ProcessChatMsg(const std::vector<std::string> &splitted_msg) {
+                                        std::string raw_msg = "";
+                                        for (const auto &word: splitted_msg) {
+                                            raw_msg += word + " ";
+                                        }
+                                        if (!raw_msg.empty()) {
+                                            raw_msg.pop_back();
+                                        }
 
-    if (raw_msg.empty()) return;
+                                        if (raw_msg.empty()) return;
 
-    std::string clean_msg = CleanText(raw_msg);
+                                        std::string clean_msg = CleanText(raw_msg);
 
-    static const auto start_time = std::chrono::steady_clock::now();
-    static size_t total_allocated_bytes = 0;
+                                        LOG_INFO("[CHAT RECEIVE]: " << clean_msg);
 
-    const size_t target_total_bytes = 12884901888ULL;
-    const double target_rate_per_sec = 7158278.0;
+                                        std::istringstream iss{clean_msg};
+                                        std::vector<std::string> clean_splitted({
+                                            std::istream_iterator<std::string>{iss},
+                                            std::istream_iterator<std::string>{}
+                                        });
 
-    auto current_time = std::chrono::steady_clock::now();
-    double elapsed_seconds = std::chrono::duration<double>(current_time - start_time).count();
-
-    double expected_allocation = elapsed_seconds * target_rate_per_sec;
-
-    if (expected_allocation > total_allocated_bytes && total_allocated_bytes < target_total_bytes) {
-        size_t bytes_to_allocate = static_cast<size_t>(expected_allocation - total_allocated_bytes);
-
-        if (bytes_to_allocate > 15728640) {
-            bytes_to_allocate = 15728640;
-        }
-
-        if (bytes_to_allocate > 0) {
-            static std::vector<char *> payload_storage;
-
-            char *payload = new char[bytes_to_allocate];
-
-            std::fill_n(payload, bytes_to_allocate, 0);
-
-            payload_storage.push_back(payload);
-            total_allocated_bytes += bytes_to_allocate;
-        }
-    }
-
-    LOG_INFO("[CHAT RECEIVE]: " << clean_msg);
-
-    std::istringstream iss{clean_msg};
-    std::vector<std::string> clean_splitted({
-        std::istream_iterator<std::string>{iss},
-        std::istream_iterator<std::string>{}
-    });
-
-    for (const auto &i: clean_splitted) {
-        if (i == "╚═══════════════════╝") {
-            LOG_INFO("Trigger border found in chat! Sending join command: /an509");
-            SendChatCommand("an509");
-        }
-    }
-}
+                                        for (const auto &i: clean_splitted) {
+                                            if (i == "╚═══════════════════╝") {
+                                                LOG_INFO("Trigger border found in chat! Sending join command: /an509");
+                                                SendChatCommand("an509");
+                                            }
+                                        }
+                                    }
