@@ -28,7 +28,9 @@ class ResourcePackHandler;
 class ChatListener : public Botcraft::ManagersClient
 {
 public:
-    ChatListener();
+    int max_price = 0;
+
+    ChatListener(int max_price);
     virtual ~ChatListener() override;
 
     void StartAutoBuy(long long max_price);

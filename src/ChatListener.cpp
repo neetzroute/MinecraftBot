@@ -5,6 +5,7 @@
 #include <iterator>
 #include <cctype>
 #include <algorithm>
+#include <iostream>
 #include <thread>
 #include <random>
 
@@ -26,9 +27,7 @@
 using namespace Botcraft;
 using namespace ProtocolCraft;
 
-static std::vector<std::string *> chat_history_buffer;
-
-ChatListener::ChatListener()
+ChatListener::ChatListener(int max_price)
     : m_waiting_for_ah(false),
       m_ah_container_id(-1),
       m_state_id(0),
@@ -38,6 +37,7 @@ ChatListener::ChatListener()
       m_buying_in_progress(false),
       m_is_confirm_screen(false),
       m_confirm_clicked(false),
+      max_price(max_price),
       m_last_click_time(std::chrono::steady_clock::time_point()) {
 }
 
@@ -132,10 +132,6 @@ void ChatListener::Handle(ClientboundSetTitleTextPacket &msg) {
     ProcessChatMsg(splitted);
 }
 
-// ==================================================================
-// ОБРАБОТКА ОКОН / GUI (АУКЦИОН)
-// ==================================================================
-
 void ChatListener::StartAhSearch() {
     m_waiting_for_ah = true;
     m_ah_container_id = -1;
@@ -162,7 +158,6 @@ void ChatListener::StartAutoBuy(long long max_price) {
     m_last_click_time = std::chrono::steady_clock::time_point();
 
     LOG_INFO("[AutoBuy] Started with max price: " << m_max_price);
-    SendChatCommand("ah search звезда незера");
 }
 
 void ChatListener::StopAutoBuy() {
@@ -182,22 +177,12 @@ void ChatListener::Handle(ClientboundOpenScreenPacket &msg) {
         std::string title = CleanText(msg.GetTitle().GetText());
         LOG_INFO("Auction GUI opened. Container ID: " << m_ah_container_id << " | Title: " << title);
 
-        if (title.find("Подтверж") != std::string::npos ||
-            title.find("Покупка") != std::string::npos ||
-            title.find("подтверж") != std::string::npos ||
-            title.find("покупк") != std::string::npos) {
-            m_is_confirm_screen = true;
-            m_confirm_clicked = false;
-            m_buying_in_progress = false;
-            LOG_INFO("[AutoBuy] Confirmation screen state: ACTIVE");
-        } else {
-            m_is_confirm_screen = false;
-            m_buying_in_progress = false;
-        }
+        m_is_confirm_screen = false;
+        m_buying_in_progress = false;
     }
 }
 
-void ChatListener::Handle(ClientboundContainerSetContentPacket &msg) {
+void ChatListener::Handle(ClientboundContainerSetContentPacket& msg) {
     ManagersClient::Handle(msg);
 
     m_state_id = msg.GetStateId();
@@ -210,73 +195,9 @@ void ChatListener::Handle(ClientboundContainerSetContentPacket &msg) {
             return;
         }
 
-        const auto &items = m_container_items;
+        const auto& items = m_container_items;
 
-        // ==================================================================
-        // СЦЕНАРИЙ А: ЭКРАН ПОДТВЕРЖДЕНИЯ ПОКУПКИ
-        // ==================================================================
-        if (m_is_confirm_screen) {
-            if (m_confirm_clicked) {
-                return;
-            }
-
-            LOG_INFO("=== CONFIRMATION SCREEN ACTIVE (Container: " << container_id << ") ===");
-            int confirm_slot_index = -1;
-
-            for (size_t i = 0; i < items.size(); ++i) {
-                if (!items[i].IsEmptySlot()) {
-                    bool is_trophy = false, is_confirm = false, is_refresh = false;
-                    AnalyzeSlot(items[i], i, is_trophy, is_confirm, is_refresh);
-
-                    std::string item_lore_summary = "";
-                    const auto &patch = items[i].GetComponents();
-                    const auto &components_map = patch.GetMap();
-                    auto it_lore = components_map.find(Components::DataComponentTypes::Lore);
-                    if (it_lore != components_map.end() && it_lore->second != nullptr) {
-                        auto lore_component = std::dynamic_pointer_cast<Components::DataComponentTypeItemLore>(
-                            it_lore->second);
-                        if (lore_component) {
-                            for (const auto &line: lore_component->GetLines()) {
-                                item_lore_summary += CleanText(line.GetText()) + " | ";
-                            }
-                        }
-                    }
-
-                    LOG_INFO("Confirm GUI Slot " << i << " (Item ID: " << items[i].GetItemId()
-                        << ") Lore: [" << item_lore_summary << "] -> IsConfirm: " << (is_confirm ? "YES" : "NO"));
-
-                    if (is_confirm) {
-                        confirm_slot_index = i;
-                    }
-                }
-            }
-            LOG_INFO("=====================================================");
-
-            m_confirm_clicked = true;
-
-            if (confirm_slot_index != -1) {
-                LOG_INFO("[AutoBuy] Confirm button found in Slot " << confirm_slot_index << ". Clicking CONFIRM...");
-                SendClick(m_ah_container_id, m_state_id, confirm_slot_index, 0, 0);
-            } else {
-                LOG_WARNING("[AutoBuy] Confirm button not detected by text. Using fallback Slot 11...");
-                SendClick(m_ah_container_id, m_state_id, 11, 0, 0);
-            }
-
-            std::thread([this]() {
-                std::this_thread::sleep_for(std::chrono::milliseconds(1500));
-                if (m_auto_buying) {
-                    LOG_INFO("[AutoBuy] Re-opening auction search...");
-                    SendChatCommand("ah search звезда незера");
-                }
-            }).detach();
-
-            return;
-        }
-
-        // ==================================================================
-        // СЦЕНАРИЙ Б: ОБЫЧНЫЙ ЭКРАН АУКЦИОНА
-        // ==================================================================
-
+        // Аукцион
         int cheap_slot_index = -1;
         long long found_price = 0;
         size_t slots_to_check = std::min(items.size(), static_cast<size_t>(45));
@@ -285,8 +206,9 @@ void ChatListener::Handle(ClientboundContainerSetContentPacket &msg) {
         long long lowest_price = m_max_price + 1;
 
         for (size_t i = 0; i < slots_to_check; ++i) {
-            const auto &current_slot = items[i];
+            const auto& current_slot = items[i];
             if (!current_slot.IsEmptySlot()) {
+                std::cout << "Проверяем слот " << i << std::endl;
                 bool is_trophy = false, is_confirm = false, is_refresh = false;
                 long long price = AnalyzeSlot(current_slot, i, is_trophy, is_confirm, is_refresh);
 
@@ -399,6 +321,8 @@ long long ChatListener::AnalyzeSlot(const Slot& slot, int slot_index, bool& is_t
         if (lore_component) {
             for (const auto &line: lore_component->GetLines()) {
                 std::string clean_line = CleanText(line.GetText());
+
+                std::cout << "LINE: " << clean_line << std::endl;
 
                 if (clean_line.contains("Продавец") ||
                     clean_line.contains("продавец")) {
@@ -569,6 +493,8 @@ void ChatListener::ProcessChatMsg(const std::vector<std::string> &splitted_msg) 
         if (i == "╚═══════════════════╝") {
             LOG_INFO("Trigger border found in chat! Sending join command: /an509");
             SendChatCommand("an509");
+            StartAhSearch();
+            StartAutoBuy(max_price);
         }
     }
 }

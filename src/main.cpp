@@ -15,7 +15,11 @@ int main()
         Botcraft::Logger::GetInstance().SetFilename("");
         Botcraft::Logger::GetInstance().RegisterThread("main");
 
-        ChatListener client;
+        int max_price = 0;
+        std::cout << "Максимальная цена: ";
+        std::cin >> max_price;
+        std::cout << "Принято. Запускаемся.\n";
+        ChatListener client(max_price);
 
         LOG_INFO("Starting connection process");
         client.Connect("play2.funtime.su", "Aaagawg"); // Ник в коде! Какой ужас! Какой я плохой программист!
